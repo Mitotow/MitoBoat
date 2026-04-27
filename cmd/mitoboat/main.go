@@ -1,14 +1,16 @@
 package main
 
 import (
-	"fmt"
-
-	"mitoboat/internal/config"
-	"mitoboat/internal/db"
+	"mitoboat/internal/bot"
+	"os"
 )
 
 func main() {
-	fmt.Println("[BOT] Initializing MitoBoat ...")
-	config.LoadEnv()
-	db.ConnectDb()
+	ctx, err := bot.SetupBot()
+	if err != nil {
+		ctx.Logger.Error("Critical error when starting", "error", err)
+		os.Exit(1)
+	}
+
+	bot.Listen(ctx)
 }
