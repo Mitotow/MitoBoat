@@ -2,15 +2,25 @@ package main
 
 import (
 	"mitoboat/internal/bot"
+	"mitoboat/internal/flags"
 	"os"
 )
 
 func main() {
-	ctx, err := bot.SetupBot()
-	if err != nil {
-		ctx.Logger.Error("Critical error when starting", "error", err)
-		os.Exit(1)
+	var err error
+
+	args := flags.GetFlags()
+	if *args.SetupDb {
+		err = bot.SetupDb()
+	} else {
+		ctx, err := bot.SetupBot()
+
+		if err == nil {
+			bot.Listen(ctx)
+		}
 	}
 
-	bot.Listen(ctx)
+	if err != nil {
+		os.Exit(1)
+	}
 }
