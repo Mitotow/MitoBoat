@@ -11,10 +11,9 @@ func main() {
 
 	args := flags.GetFlags()
 	if *args.SetupDb {
-		err = bot.SetupDb()
+		err = bot.SetupDb(args)
 	} else {
-		ctx, err := bot.SetupBot()
-
+		ctx, err := bot.SetupBot(args)
 		if err == nil {
 			bot.Listen(ctx)
 		}

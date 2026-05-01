@@ -1,16 +1,29 @@
 package types
 
-type BotToken struct {
-	ID           uint   `gorm:"primaryKey"`
-	AccessToken  string `gorm:"not null"`
-	RefreshToken string `gorm:"not null"`
-	ExpiresAt    string `gorm:"not null"`
-}
+import (
+	"time"
 
-type Streamer struct {
-	ID           string `gorm:"primaryKey"`
-	Username     string `gorm:"not null"`
+	"gorm.io/gorm"
+)
+
+type BotToken struct {
+	ID           uint
 	AccessToken  string
 	RefreshToken string
 	ExpiresAt    string
+}
+
+type StreamerToken struct {
+	ID           uint
+	AccessToken  string
+	RefreshToken string
+	ExpiresAt    string
+}
+
+type Streamer struct {
+	ID        string
+	Username  string
+	Token     StreamerToken `gorm:"embedded"`
+	CreatedAt time.Time
+	DeletedAt gorm.DeletedAt `gorm:"index"`
 }

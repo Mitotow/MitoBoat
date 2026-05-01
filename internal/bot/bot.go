@@ -3,8 +3,9 @@ package bot
 import (
 	"log/slog"
 	"mitoboat/internal/db"
-	"mitoboat/internal/twitchUtils"
+	"mitoboat/internal/flags"
 	"mitoboat/internal/types"
+	"mitoboat/internal/utils"
 	"os"
 
 	"github.com/gempir/go-twitch-irc/v4"
@@ -41,8 +42,8 @@ func init() {
 }
 
 // SetupDb initialize a connection and run a migration on the Database.
-func SetupDb() error {
-	_, err := db.ConnectDb(true)
+func SetupDb(flags *flags.BotFlags) error {
+	_, err := db.ConnectDb(true, *flags.Verbose)
 	if err != nil {
 		return err
 	}
@@ -52,22 +53,22 @@ func SetupDb() error {
 
 // SetupBot initialize the bot context by creating logger, loading environment variables,
 // connect to database, create global helix client and create IRC client.
-func SetupBot() (*types.BotContext, error) {
+func SetupBot(flags *flags.BotFlags) (*types.BotContext, error) {
 	ctx := &types.BotContext{}
 
-	ds, err := db.ConnectDb(false)
+	ds, err := db.ConnectDb(false, *flags.Verbose)
 	if err != nil {
 		return nil, err
 	}
 	ctx.Db = ds
 
-	helixClient, err := twitchUtils.GetGlobalHelixClient()
+	helixClient, err := utils.GetGlobalHelixClient()
 	if err != nil {
 		return nil, err
 	}
 	ctx.GlobalHelix = helixClient
 
-	ircClient, err := twitchUtils.GetIrcClient(ctx)
+	ircClient, err := utils.GetIrcClient(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -82,17 +83,16 @@ func Listen(ctx *types.BotContext) {
 
 	ctx.IrcClient.OnConnect(func() { logger.Info("IRC connection established") })
 	ctx.IrcClient.OnPrivateMessage(func(message twitch.PrivateMessage) { handlePrivateMessage(ctx, message) })
-	ctx.IrcClient.OnNoticeMessage(handleNoticeMessage)
 
 	var streamers []types.Streamer
-	ctx.Db.Find(&streamers)
+	ctx.Db.Debug().Find(&streamers)
 
 	logger.Debug("All streamers found in database", "count", len(streamers))
 	for _, streamer := range streamers {
 		logger.Debug("Joining streamer channel", "username", streamer.Username)
 
 		ctx.IrcClient.Join(streamer.Username)
-		helixClient, _ := twitchUtils.GetStreamerHelixClient(ctx, &streamer)
+		helixClient, _ := utils.GetStreamerHelixClient(ctx, &streamer)
 		ctx.StreamerContexts = append(ctx.StreamerContexts, &types.StreamerContext{
 			Streamer:  &streamer,
 			UserHelix: helixClient,

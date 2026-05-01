@@ -1,4 +1,4 @@
-package twitchUtils
+package utils
 
 import (
 	"log/slog"
@@ -19,20 +19,21 @@ func getHelixClient(ctx *types.BotContext, logger *slog.Logger, streamer *types.
 	}
 
 	if streamer != nil {
-		if v, _, _ := client.ValidateToken(streamer.AccessToken); !v {
+		if v, _, _ := client.ValidateToken(streamer.Token.AccessToken); !v {
 			logger.Debug("UserAccessToken as expired")
-			resp, err := client.RefreshUserAccessToken(streamer.RefreshToken)
+			resp, err := client.RefreshUserAccessToken(streamer.Token.RefreshToken)
 			if err != nil {
 				logger.Error("Cannot refresh UserAccessToken")
 				return nil, err
 			}
 
-			streamer.AccessToken = resp.Data.AccessToken
-			streamer.RefreshToken = resp.Data.RefreshToken
+			streamer.Token.AccessToken = resp.Data.AccessToken
+			streamer.Token.RefreshToken = resp.Data.RefreshToken
 			ctx.Db.Save(streamer)
 		}
-		client.SetUserAccessToken(streamer.AccessToken)
-		client.SetRefreshToken(streamer.RefreshToken)
+
+		client.SetUserAccessToken(streamer.Token.AccessToken)
+		client.SetRefreshToken(streamer.Token.RefreshToken)
 		logger.Info("Streamer Helix Client ready")
 	} else {
 		resp, err := client.RequestAppAccessToken([]string{})
@@ -40,6 +41,7 @@ func getHelixClient(ctx *types.BotContext, logger *slog.Logger, streamer *types.
 			logger.Error("Could not get an App Access Token", "error", err)
 			return nil, err
 		}
+
 		client.SetAppAccessToken(resp.Data.AccessToken)
 		logger.Info("Global Helix Client ready")
 	}

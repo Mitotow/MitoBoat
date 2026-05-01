@@ -1,4 +1,4 @@
-package twitchUtils
+package utils
 
 import (
 	"fmt"
