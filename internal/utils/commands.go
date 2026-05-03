@@ -1,12 +1,8 @@
 package utils
 
 import (
-	"errors"
-	"log/slog"
 	"mitoboat/internal/types"
 	"strings"
-
-	"gorm.io/gorm"
 )
 
 func GetCommandFromMessage(message string) *string {
@@ -25,10 +21,6 @@ func ExecuteIfFound(ctx *types.BotContext, channel string, dest types.ReplyableC
 	if err == nil {
 		ctx.IrcClient.Say(channel, dest.GetText())
 		return true
-	}
-
-	if !errors.Is(err, gorm.ErrRecordNotFound) {
-		slog.Error("Database error searching command", "error", err, "query", query)
 	}
 
 	return false

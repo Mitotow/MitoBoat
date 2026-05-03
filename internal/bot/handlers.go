@@ -24,12 +24,15 @@ func handlePrivateMessage(ctx *types.BotContext, message twitch.PrivateMessage) 
 		return
 	}
 
-	if utils.ExecuteIfFound(ctx, message.Channel, &types.TextCommand{}, "name = ?", cmdName) {
+	logger.Debug("Searching for command", "command", *cmdName)
+	if utils.ExecuteIfFound(ctx, message.Channel, &types.TextCommand{}, "name = ?", *cmdName) {
+		logger.Debug("found")
 		return
 	}
 	logger.Debug("No default command found, searching for custom command ...")
 
-	if utils.ExecuteIfFound(ctx, message.Channel, &types.CustomTextCommand{}, "streamer_id = ? AND name = ?", sctx.Streamer.ID, cmdName) {
+	if utils.ExecuteIfFound(ctx, message.Channel, &types.CustomTextCommand{}, "streamer_id = ? AND name = ?", sctx.Streamer.ID, *cmdName) {
+		logger.Debug("found")
 		return
 	}
 }

@@ -6,24 +6,22 @@ import (
 	"gorm.io/gorm"
 )
 
-type BotToken struct {
-	ID           uint
+type Token struct {
 	AccessToken  string
 	RefreshToken string
-	ExpiresAt    string
 }
 
-type StreamerToken struct {
-	ID           uint
-	AccessToken  string
-	RefreshToken string
-	ExpiresAt    string
+type BotToken struct {
+	ID        uint
+	Token     Token `gorm:"embedded"`
+	UpdatedAt time.Time
 }
 
 type Streamer struct {
 	ID        string
 	Username  string
-	Token     StreamerToken `gorm:"embedded"`
+	Token     Token `gorm:"embedded"`
 	CreatedAt time.Time
+	UpdatedAt time.Time
 	DeletedAt gorm.DeletedAt `gorm:"index"`
 }
