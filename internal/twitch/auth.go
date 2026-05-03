@@ -1,14 +1,18 @@
-package utils
+package twitch
 
-import "mitoboat/internal/types"
+import (
+	"mitoboat/internal/domain"
+
+	"github.com/nicklaw5/helix/v2"
+)
 
 // ValidateAccessToken ask via helix if the given token is valid.
 // If not, it will call the RefreshUserAccessToken function and set
 // the new Access Token and Refresh Token in the token struct given
-func ValidateAccessToken(ctx *types.BotContext, token *types.Token) (bool, error) {
-	v, vres, verr := ctx.GlobalHelix.ValidateToken(token.AccessToken)
+func ValidateAccessToken(helixClient *helix.Client, token *domain.Token) (bool, error) {
+	v, vres, verr := helixClient.ValidateToken(token.AccessToken)
 	if !v && vres.StatusCode == 200 && verr == nil {
-		res, err := ctx.GlobalHelix.RefreshUserAccessToken(token.RefreshToken)
+		res, err := helixClient.RefreshUserAccessToken(token.RefreshToken)
 		if err != nil {
 			return true, err
 		}

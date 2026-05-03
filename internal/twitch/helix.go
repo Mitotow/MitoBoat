@@ -1,8 +1,8 @@
-package utils
+package twitch
 
 import (
+	"mitoboat/internal/domain"
 	"mitoboat/internal/env"
-	"mitoboat/internal/types"
 
 	"github.com/nicklaw5/helix/v2"
 )
@@ -32,13 +32,13 @@ func GetGlobalHelixClient() (*helix.Client, error) {
 }
 
 // GetStreamerHelixClient return an helix client configured with the UserAccessToken of a streamer
-func GetStreamerHelixClient(ctx *types.BotContext, streamer *types.Streamer) (*helix.Client, error) {
+func GetStreamerHelixClient(ctx *domain.BotContext, streamer *domain.Streamer) (*helix.Client, error) {
 	client, err := getBaseHelixClient()
 	if err != nil {
 		return nil, err
 	}
 
-	changed, err := ValidateAccessToken(ctx, &streamer.Token)
+	changed, err := ValidateAccessToken(ctx.GlobalHelix, &streamer.Token)
 	if err != nil {
 		return nil, err
 	}

@@ -1,22 +1,22 @@
-package utils
+package twitch
 
 import (
 	"fmt"
 	"log/slog"
+	"mitoboat/internal/domain"
 	"mitoboat/internal/env"
-	"mitoboat/internal/types"
 
 	"github.com/gempir/go-twitch-irc/v4"
 )
 
 // GetIrcClient return an IRC client, require GlobalHelix client to be initialized in context
-func GetIrcClient(ctx *types.BotContext) (*twitch.Client, error) {
-	var token types.BotToken
+func GetIrcClient(ctx *domain.BotContext) (*twitch.Client, error) {
+	var token domain.BotToken
 	if err := ctx.Db.First(&token, 1).Error; err != nil {
 		return nil, fmt.Errorf("No token found on Database: %w", err)
 	}
 
-	changed, err := ValidateAccessToken(ctx, &token.Token)
+	changed, err := ValidateAccessToken(ctx.GlobalHelix, &token.Token)
 	if err != nil {
 		return nil, fmt.Errorf("Error while trying to validate the UserAccessToken: %w", err)
 	}

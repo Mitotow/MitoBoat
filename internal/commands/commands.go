@@ -1,10 +1,11 @@
-package utils
+package commands
 
 import (
-	"mitoboat/internal/types"
+	"mitoboat/internal/domain"
 	"strings"
 )
 
+// GetCommandFromMessage return the command in message
 func GetCommandFromMessage(message string) *string {
 	cleanedMessage := strings.TrimSpace(message)
 	if len(cleanedMessage) <= 1 || cleanedMessage[0] != '!' {
@@ -16,7 +17,8 @@ func GetCommandFromMessage(message string) *string {
 	return &cmd
 }
 
-func ExecuteIfFound(ctx *types.BotContext, channel string, dest types.ReplyableCommand, query string, args ...any) bool {
+// ExecuteTextCommand find the command by command name and send the text related to the command via IRC client
+func ExecuteTextCommand(ctx *domain.BotContext, channel string, dest domain.ReplyableCommand, query string, args ...any) bool {
 	err := ctx.Db.Where(query, args...).First(dest).Error
 	if err == nil {
 		ctx.IrcClient.Say(channel, dest.GetText())
