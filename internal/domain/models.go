@@ -17,7 +17,7 @@ type BotContext struct {
 	Db               *gorm.DB
 	IrcClient        *twitch.Client
 	GlobalHelix      *helix.Client
-	StreamerContexts []*StreamerContext
+	StreamerContexts []StreamerContext
 }
 
 type Token struct {

@@ -82,7 +82,7 @@ func (bot *MitoBoat) Listen() error {
 			logger.Warn("Cannot create helix client for streamer", "username", streamer.Username)
 		}
 
-		bot.Context.StreamerContexts = append(bot.Context.StreamerContexts, &domain.StreamerContext{
+		bot.Context.StreamerContexts = append(bot.Context.StreamerContexts, domain.StreamerContext{
 			Streamer:  &streamer,
 			UserHelix: helixClient,
 		})

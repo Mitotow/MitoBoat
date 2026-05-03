@@ -4,8 +4,8 @@ import "mitoboat/internal/domain"
 
 func getStreamerContext(ctx *domain.BotContext, filter func(*domain.StreamerContext) bool) *domain.StreamerContext {
 	for _, sctx := range ctx.StreamerContexts {
-		if filter(sctx) {
-			return sctx
+		if filter(&sctx) {
+			return &sctx
 		}
 	}
 
