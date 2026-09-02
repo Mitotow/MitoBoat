@@ -9,7 +9,11 @@ import (
 	"mitoboat/internal/domain"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
+
+// botTokenID is the fixed primary key of the single bot token row.
+const botTokenID = 1
 
 // ErrNotFound is returned when a lookup matches no row.
 var ErrNotFound = errors.New("not found")
@@ -108,4 +112,57 @@ func (s *Store) CustomCommands(ctx context.Context) (map[string]map[string]strin
 		byName[strings.ToLower(row.Name)] = row.Text
 	}
 	return commands, nil
+}
+
+// UpsertBotToken stores the token the bot authenticates to IRC with.
+//
+// There is only ever one, so it is pinned to a fixed id rather than appending a
+// row per authorization and leaving the bot to guess which is current.
+func (s *Store) UpsertBotToken(ctx context.Context, token domain.Token) error {
+	record := domain.BotToken{ID: botTokenID, Token: token}
+	err := s.db.WithContext(ctx).
+		Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "id"}},
+			DoUpdates: clause.AssignmentColumns([]string{"access_token", "refresh_token", "expires_at", "updated_at"}),
+		}).
+		Create(&record).Error
+	if err != nil {
+		return fmt.Errorf("save bot token: %w", err)
+	}
+	return nil
+}
+
+// UpsertStreamer registers a streamer or refreshes an existing registration.
+//
+// A streamer who re-authorizes keeps their id, and therefore their custom
+// commands, even if they have since changed their Twitch login name.
+func (s *Store) UpsertStreamer(ctx context.Context, streamer domain.Streamer) error {
+	streamer.Username = strings.ToLower(streamer.Username)
+	streamer.Active = true
+
+	err := s.db.WithContext(ctx).
+		Clauses(clause.OnConflict{
+			Columns: []clause.Column{{Name: "id"}},
+			DoUpdates: clause.AssignmentColumns([]string{
+				"username", "access_token", "refresh_token", "expires_at", "active", "updated_at", "deleted_at",
+			}),
+		}).
+		Create(&streamer).Error
+	if err != nil {
+		return fmt.Errorf("save streamer %s: %w", streamer.Username, err)
+	}
+	return nil
+}
+
+// StreamerByID loads one streamer.
+func (s *Store) StreamerByID(ctx context.Context, id string) (*domain.Streamer, error) {
+	var streamer domain.Streamer
+	err := s.db.WithContext(ctx).First(&streamer, "id = ?", id).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, fmt.Errorf("load streamer %s: %w", id, ErrNotFound)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("load streamer %s: %w", id, err)
+	}
+	return &streamer, nil
 }

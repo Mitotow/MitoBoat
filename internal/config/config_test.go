@@ -14,6 +14,7 @@ func setRequired(t *testing.T) {
 	t.Setenv("DB_NAME", "mitoboat")
 	t.Setenv("DB_USER", "postgres")
 	t.Setenv("DB_PSSWD", "password")
+	t.Setenv("ADMIN_SECRET", "a-sufficiently-long-admin-secret")
 }
 
 func TestLoadDefaults(t *testing.T) {
@@ -35,6 +36,40 @@ func TestLoadDefaults(t *testing.T) {
 	}
 	if cfg.CommandCacheTTL != 5*time.Minute {
 		t.Errorf("CommandCacheTTL = %s, want 5m", cfg.CommandCacheTTL)
+	}
+	if cfg.HTTPAddr != "127.0.0.1:8080" {
+		t.Errorf("HTTPAddr = %q, want 127.0.0.1:8080", cfg.HTTPAddr)
+	}
+	if len(cfg.BotScopes) != 2 {
+		t.Errorf("BotScopes = %v, want two chat scopes", cfg.BotScopes)
+	}
+}
+
+// The admin secret guards the flow that mints the bot's chat token, so a weak
+// one is rejected at startup rather than quietly accepted.
+func TestLoadRejectsWeakAdminSecret(t *testing.T) {
+	setRequired(t)
+	t.Setenv("ADMIN_SECRET", "short")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("Load must reject a short ADMIN_SECRET")
+	}
+	if !strings.Contains(err.Error(), "ADMIN_SECRET") {
+		t.Errorf("error = %v, want it to mention ADMIN_SECRET", err)
+	}
+}
+
+func TestLoadParsesScopeLists(t *testing.T) {
+	setRequired(t)
+	t.Setenv("BOT_SCOPES", "chat:read,chat:edit,whispers:read")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(cfg.BotScopes) != 3 || cfg.BotScopes[2] != "whispers:read" {
+		t.Errorf("BotScopes = %v, want three scopes ending in whispers:read", cfg.BotScopes)
 	}
 }
 

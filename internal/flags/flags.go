@@ -10,6 +10,10 @@ import "flag"
 type Flags struct {
 	// SetupDB runs the schema migration and exits without starting the bot.
 	SetupDB bool
+	// AuthOnly runs just the authorization server, without connecting to chat.
+	// It is how the bot token is obtained the first time, before there is any
+	// token for the bot itself to start with.
+	AuthOnly bool
 	// Verbose turns on GORM's statement logging.
 	Verbose bool
 }
@@ -18,6 +22,7 @@ type Flags struct {
 func Parse() Flags {
 	var f Flags
 	flag.BoolVar(&f.SetupDB, "s", false, "Set up the database, run the migration, and exit")
+	flag.BoolVar(&f.AuthOnly, "a", false, "Run only the authorization server, without joining chat")
 	flag.BoolVar(&f.Verbose, "v", false, "Log every SQL statement")
 	flag.Parse()
 	return f

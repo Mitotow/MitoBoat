@@ -3,18 +3,47 @@
 A multi-tenant Twitch chat bot: one process serves every registered streamer's
 channel from a single IRC connection.
 
-## Running
+## Setup
+
+Create a Twitch application at https://dev.twitch.tv/console/apps and add
+`http://localhost:8080/auth/callback` to its OAuth Redirect URLs.
 
 ```sh
-cp .env.example .env      # then fill in the credentials
-go run ./cmd/mitoboat -s  # create or update the schema, then exit
-go run ./cmd/mitoboat     # start the bot
+cp .env.example .env               # fill in the credentials
+openssl rand -base64 24            # use this as ADMIN_SECRET
+
+go run ./cmd/mitoboat -s           # create the schema
+go run ./cmd/mitoboat -a           # authorization server only
 ```
+
+Open `http://localhost:8080/auth/bot?key=$ADMIN_SECRET` and sign in **as the
+bot account**. That stores the token the bot posts as, which is the one thing
+it cannot start without. Then:
+
+```sh
+go run ./cmd/mitoboat               # start the bot
+```
+
+Streamers add the bot themselves at `http://localhost:8080/` — no admin key,
+and their channel is joined within seconds, without a restart.
 
 | Flag | Meaning |
 | ---- | ------- |
 | `-s` | Run the database migration and exit |
+| `-a` | Run only the authorization server, without joining chat |
 | `-v` | Log every SQL statement |
+
+### Authorization
+
+| Route | Access |
+| ----- | ------ |
+| `/` | Public: the page a streamer starts from |
+| `/auth/streamer` | Public. Authorizing grants access to that streamer's own channel only |
+| `/auth/bot` | Requires `?key=$ADMIN_SECRET`: this token lets the bot speak in **every** channel |
+| `/auth/callback` | Twitch redirects here; protected by a single-use, expiring state token |
+
+Changing the bot token takes effect on restart, because IRC authenticates once
+at connect time. Streamer registrations take effect immediately.
 
 Configuration is read from the environment, falling back to a `.env` file.
 Every variable is documented in [`.env.example`](.env.example).
@@ -31,6 +60,7 @@ internal/domain     persisted entities, and nothing else
 internal/store      the database connection and every query
 internal/commands   command parsing and the in-memory command cache
 internal/twitch     Helix clients, OAuth, IRC, and chat rate limiting
+internal/web        the authorization server
 internal/bot        wiring, the streamer registry, and the message handler
 internal/flags      command line parsing
 ```
@@ -80,4 +110,16 @@ commands; only the Helix API is unavailable for them.
 
 ```sh
 go test -race ./...
+```
+
+The `internal/store` tests exercise the SQL against a real PostgreSQL and skip
+when none is configured. To run them:
+
+```sh
+podman run -d --rm --name mitoboat-test \
+  -e POSTGRES_PASSWORD=testpass -e POSTGRES_USER=mitoboat -e POSTGRES_DB=mitoboat \
+  -p 55432:5432 docker.io/library/postgres:16-alpine
+
+DB_HOST=127.0.0.1 DB_PORT=55432 DB_NAME=mitoboat DB_USER=mitoboat DB_PSSWD=testpass \
+  go test -race -count=1 ./internal/store/
 ```

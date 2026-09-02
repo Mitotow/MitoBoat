@@ -22,6 +22,22 @@ type Config struct {
 	TwitchSecret string `envconfig:"TWITCH_SECRET" required:"true"`
 	IRCUser      string `envconfig:"IRC_USER" required:"true"`
 
+	// HTTPAddr is where the authorization server listens. It serves the OAuth
+	// flow that puts tokens in the database; nothing else is exposed.
+	HTTPAddr string `envconfig:"HTTP_ADDR" default:"127.0.0.1:8080"`
+	// RedirectURI must match one of the OAuth Redirect URLs registered on the
+	// Twitch application exactly, including scheme, port and path.
+	RedirectURI string `envconfig:"REDIRECT_URI" default:"http://localhost:8080/auth/callback"`
+	// AdminSecret gates the authorization pages. The flow hands out tokens
+	// that let the bot speak as an account, so it must not be open to anyone
+	// who can reach the port.
+	AdminSecret string `envconfig:"ADMIN_SECRET" required:"true"`
+
+	// BotScopes are requested when authorizing the account the bot speaks as.
+	BotScopes []string `envconfig:"BOT_SCOPES" default:"chat:read,chat:edit"`
+	// StreamerScopes are requested when a streamer registers their channel.
+	StreamerScopes []string `envconfig:"STREAMER_SCOPES" default:"moderator:read:followers,channel:read:subscriptions"`
+
 	DBHost     string `envconfig:"DB_HOST" default:"127.0.0.1"`
 	DBPort     string `envconfig:"DB_PORT" default:"5432"`
 	DBName     string `envconfig:"DB_NAME" required:"true"`
@@ -84,6 +100,9 @@ func (c *Config) validate() error {
 		"DB_NAME":       c.DBName,
 		"DB_USER":       c.DBUser,
 		"DB_PSSWD":      c.DBPassword,
+		"ADMIN_SECRET":  c.AdminSecret,
+		"REDIRECT_URI":  c.RedirectURI,
+		"HTTP_ADDR":     c.HTTPAddr,
 	}
 	for name, value := range required {
 		if strings.TrimSpace(value) == "" {
@@ -106,6 +125,14 @@ func (c *Config) validate() error {
 	}
 	if c.CommandCacheTTL <= 0 {
 		return fmt.Errorf("COMMAND_CACHE_TTL must be positive, got %s", c.CommandCacheTTL)
+	}
+	if len(c.BotScopes) == 0 {
+		return fmt.Errorf("BOT_SCOPES must not be empty")
+	}
+	// A short admin secret is worth rejecting outright: it guards the flow
+	// that mints chat tokens for the bot account.
+	if len(c.AdminSecret) < 16 {
+		return fmt.Errorf("ADMIN_SECRET must be at least 16 characters, got %d", len(c.AdminSecret))
 	}
 	return nil
 }
