@@ -33,6 +33,44 @@ and their channel is joined within seconds, without a restart.
 | `-a` | Run only the authorization server, without joining chat |
 | `-v` | Log every SQL statement |
 
+## Running with Compose
+
+`docker-compose.yml` brings up PostgreSQL, runs the migration, and starts the
+bot. It reads the same `.env` as a local run, so fill that in first; `DB_HOST`,
+`DB_PORT` and `HTTP_ADDR` are overridden for the container network and can be
+left at their defaults.
+
+First run, to store the bot token:
+
+```sh
+docker compose --profile bootstrap up auth   # postgres, migrate, then -a
+```
+
+Open `http://localhost:8080/auth/bot?key=$ADMIN_SECRET`, sign in **as the bot
+account**, then stop it with Ctrl-C. After that:
+
+```sh
+docker compose up -d                         # postgres, migrate, bot, adminer
+docker compose logs -f bot
+```
+
+| Service | Role |
+| ------- | ---- |
+| `postgres` | The database, on a named `pgdata` volume |
+| `migrate` | Runs `mitoboat -s` and exits; the bot waits for it to succeed |
+| `bot` | Chat plus the authorization flow |
+| `auth` | `mitoboat -a`, in the `bootstrap` profile, for the first-run token |
+| `adminer` | Web UI for the database, on `http://127.0.0.1:8081` |
+
+Adminer replaces `psql` inside the container: log in with `postgres` as the
+server (already prefilled) and the `DB_USER` / `DB_PSSWD` / `DB_NAME` from
+`.env`. It is published on loopback only, because it reaches the database with
+full privileges — do not bind it to a public interface. `ADMINER_PORT` moves it
+off 8081.
+
+Set `HTTP_PORT` to publish on a different host port, and `VERSION` to stamp the
+binary. `podman-compose` works the same way.
+
 ### Authorization
 
 | Route | Access |
