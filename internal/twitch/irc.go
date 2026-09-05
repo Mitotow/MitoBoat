@@ -3,37 +3,110 @@ package twitch
 import (
 	"fmt"
 	"log/slog"
-	"mitoboat/internal/domain"
-	"mitoboat/internal/env"
+	"strings"
+	"sync"
 
-	"github.com/gempir/go-twitch-irc/v4"
+	"mitoboat/internal/config"
+	"mitoboat/internal/domain"
+
+	irc "github.com/gempir/go-twitch-irc/v4"
 )
 
-// GetIrcClient return an IRC client, require GlobalHelix client to be initialized in context
-func GetIrcClient(ctx *domain.BotContext) (*twitch.Client, error) {
-	var token domain.BotToken
-	if err := ctx.Db.First(&token, 1).Error; err != nil {
-		return nil, fmt.Errorf("No token found on Database: %w", err)
+// Chat wraps the IRC client with the outbound rate limiting Twitch requires.
+//
+// The bot's own username is kept here so incoming messages from the bot can be
+// dropped: without that check a command whose reply itself starts with '!'
+// makes the bot answer itself forever.
+type Chat struct {
+	client   *irc.Client
+	username string
+	limiter  *channelLimiter
+
+	mu     sync.RWMutex
+	joined map[string]struct{}
+}
+
+// NewChat builds a chat client authenticated with the bot's user token.
+func NewChat(cfg *config.Config, token domain.Token) *Chat {
+	username := strings.ToLower(cfg.IRCUser)
+	client := irc.NewClient(username, "oauth:"+token.AccessToken)
+
+	return &Chat{
+		client:   client,
+		username: username,
+		limiter:  newChannelLimiter(cfg.SayBurst, cfg.SayWindow),
+		joined:   make(map[string]struct{}),
+	}
+}
+
+// Client exposes the underlying client so callers can register handlers.
+func (c *Chat) Client() *irc.Client { return c.client }
+
+// Username is the bot's own login, lowercased.
+func (c *Chat) Username() string { return c.username }
+
+// IsSelf reports whether a message was sent by the bot itself.
+func (c *Chat) IsSelf(login string) bool {
+	return strings.EqualFold(login, c.username)
+}
+
+// Join subscribes to a channel, ignoring a repeat join.
+func (c *Chat) Join(channel string) {
+	channel = strings.ToLower(channel)
+
+	c.mu.Lock()
+	if _, ok := c.joined[channel]; ok {
+		c.mu.Unlock()
+		return
+	}
+	c.joined[channel] = struct{}{}
+	c.mu.Unlock()
+
+	c.client.Join(channel)
+}
+
+// Part leaves a channel.
+func (c *Chat) Part(channel string) {
+	channel = strings.ToLower(channel)
+
+	c.mu.Lock()
+	delete(c.joined, channel)
+	c.mu.Unlock()
+
+	c.client.Depart(channel)
+}
+
+// Say sends a message, dropping it if the channel is over its rate limit.
+//
+// Dropping is deliberate: queueing would let a burst build an unbounded backlog
+// of replies that arrive long after the message that triggered them.
+func (c *Chat) Say(channel, text string) {
+	channel = strings.ToLower(channel)
+	if text == "" {
+		return
 	}
 
-	changed, err := ValidateAccessToken(ctx.GlobalHelix, &token.Token)
-	if err != nil {
-		return nil, fmt.Errorf("Error while trying to validate the UserAccessToken: %w", err)
+	if !c.limiter.allow(channel) {
+		slog.Warn("Dropped message, channel is over its rate limit",
+			"scope", "IRC", "channel", channel)
+		return
 	}
 
-	if changed {
-		if err = ctx.Db.Save(&token).Error; err != nil {
-			return nil, fmt.Errorf("Cannot save new UserAccessToken to Database: %w", err)
-		}
-	}
+	c.client.Say(channel, text)
+}
 
-	accessToken := token.Token.AccessToken
-	if len(accessToken) > 8 {
-		slog.Debug("IRC Debug",
-			"user", env.DefaultEnv.IrcUser,
-			"token_start", accessToken[:4],
-			"token_end", accessToken[len(accessToken)-4:])
+// Connect blocks until the connection drops or Disconnect is called.
+func (c *Chat) Connect() error {
+	if err := c.client.Connect(); err != nil {
+		return fmt.Errorf("irc connection: %w", err)
 	}
-	ircClient := twitch.NewClient(env.DefaultEnv.IrcUser, fmt.Sprintf("oauth:%s", token.Token.AccessToken))
-	return ircClient, nil
+	return nil
+}
+
+// Disconnect closes the connection, unblocking Connect.
+func (c *Chat) Disconnect() error {
+	if err := c.client.Disconnect(); err != nil {
+		return fmt.Errorf("irc disconnect: %w", err)
+	}
+	return nil
 }

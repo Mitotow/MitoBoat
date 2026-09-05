@@ -1,0 +1,98 @@
+name: mitoboat
+
+# Every mitoboat service runs the same image and the same configuration; only
+# the flags differ. Compose reads .env twice here: once to interpolate the
+# ${...} below, and once as env_file to hand the whole file to the bot.
+x-mitoboat: &mitoboat
+  build:
+    context: .
+    args:
+      VERSION: ${VERSION:-dev}
+  image: mitoboat:local
+  # Built locally and never published, so tell Compose not to try the registry
+  # first: the pull attempt only produces a "pull access denied" warning.
+  pull_policy: build
+  env_file: .env
+  environment:
+    # Inside the network the database is a service name, not localhost, and the
+    # HTTP server must listen on every interface for the published port to
+    # reach it. These win over the same names in .env.
+    DB_HOST: postgres
+    DB_PORT: "5432"
+    HTTP_ADDR: 0.0.0.0:8080
+  depends_on:
+    postgres:
+      condition: service_healthy
+  stop_grace_period: 30s
+
+services:
+  postgres:
+    image: docker.io/library/postgres:17-alpine
+    environment:
+      POSTGRES_USER: ${DB_USER:?DB_USER must be set in .env}
+      POSTGRES_PASSWORD: ${DB_PSSWD:?DB_PSSWD must be set in .env}
+      POSTGRES_DB: ${DB_NAME:?DB_NAME must be set in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # Nothing starts before the database actually answers queries: accepting
+    # TCP connections is not the same as being ready.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
+  # Runs the schema migration and exits. The bot waits for it to succeed.
+  migrate:
+    <<: *mitoboat
+    command: ["-s"]
+    restart: "no"
+
+  # Chat plus the authorization flow, which is the normal way to run the bot.
+  bot:
+    <<: *mitoboat
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - "${HTTP_PORT:-8080}:8080"
+    restart: unless-stopped
+
+  # First-run bootstrap only: the bot cannot start until a bot token is stored,
+  # and this serves the authorization flow without joining chat. Start it with
+  # `docker compose --profile bootstrap up auth`, authorize, then stop it.
+  auth:
+    <<: *mitoboat
+    command: ["-a"]
+    profiles: ["bootstrap"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - "${HTTP_PORT:-8080}:8080"
+    restart: "no"
+
+  # Web UI for the database, so it can be inspected and edited without exec'ing
+  # into a container. Published on loopback only: it reaches Postgres with full
+  # privileges, so it must not be exposed beyond this machine.
+  adminer:
+    image: docker.io/library/adminer:6
+    environment:
+      # Prefills the "Server" field on the login form; the credentials are
+      # still the DB_USER / DB_PSSWD from .env.
+      ADMINER_DEFAULT_SERVER: postgres
+    ports:
+      - "127.0.0.1:${ADMINER_PORT:-8081}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pgdata:
